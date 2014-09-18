@@ -87,6 +87,7 @@ class video:
         self.operationnumber=0
         self.logfile=logfile
         self.workdir=workdir
+
     def detectcropvalues(self, frames=0, horizcrop=-1, horizcroppercent=-1, turbo=TURBO):
         segmentsecs=5
         if turbo < segmentsecs:
