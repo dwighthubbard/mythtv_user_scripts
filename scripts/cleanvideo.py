@@ -1,10 +1,17 @@
 #!/usr/bin/python
-import os,sys, tempfile, getopt, re,  socket
+import os
+import sys
+import tempfile
+import getopt
+import re
+import socket
+import logging
 try:
     import MySQLdb
 except ImportError:
     print 'This program requires the python MySQLdb module'
     sys.exit(10)
+
 
 #Todo
 # 1. Add code to verify prereqs including:
@@ -14,8 +21,6 @@ except ImportError:
 #   mythtranscode
 # 2. Add code to transcode to a second file for example use on ipod/cell-phone/etc
 
-# This determines if debug output will be printed
-DEBUG=1
 
 ###########################################################
 # Set some reasonable defaults
@@ -37,8 +42,8 @@ TURBO=213
 MPEGQUALITY=1800
 MYTHRECORDINGSPATH=['/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings', '.']
 
-# WORKDIRS is A list of directories we can use for temporary files, we will check if the directory exists and has adequate space and use the
-# first directory from the list with enough room.
+# WORKDIRS is A list of directories we can use for temporary files, we will check if the directory exists and has
+# adequate space and use the first directory from the list with enough room.
 WORKDIRS=['/tmp','/work','/var/lib/mythtv/recordings','/usr/local/mythtv/recordings']
 WORKDIR='/var/lib/mythtv/recordings'
 
@@ -107,7 +112,7 @@ class video:
             command='mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -vo null %s 2> /dev/null' % (edifilename,self.filename)
         else:
             command='mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -frames %d -vo null %s 2>/dev/null' % (edifilename,frames,self.filename)
-        if DEBUG: print 'DEBUG: Running command:',command
+        logging.debug('Running command:',command)
         for line in os.popen(command).readlines():
             splitline=line.strip().split()
             if len(splitline) > 3 and splitline[0] == 'VIDEO:':
@@ -150,8 +155,10 @@ class video:
             self.cropbottom=self.height-(self.croptop+(int(cropvalues[1])))
             if self.cropbottom < 0:
                 self.cropbottom=0
-        if DEBUG: print 'DEBUG: Crop borders are', self.width,self.height,self.croptop, self.cropleft, self.cropbottom, self.cropright
+        logging.debug(
+            'Crop borders are', self.width,self.height,self.croptop, self.cropleft, self.cropbottom, self.cropright)
         os.remove(edifilename)
+
     def createlockfile(self, completed=False):
         fh=open("%s.cleanupvideoran" % self.filename,'w')
         fh.write('filename: %s\n' % self.filename)
@@ -183,8 +190,9 @@ class video:
                         else:
                             rc=0
         return(rc)
+
     def swapfiles(self, keeporiginal=False):
-        if DEBUG: print 'DEBUG: Swapping files: %s/new.%s <-> %s' % (self.workdir,os.path.basename(self.filename),self.filename)
+        logging.debug('Swapping files: %s/new.%s <-> %s' % (self.workdir,os.path.basename(self.filename),self.filename))
         if keeporiginal:
             for backupnumber in range(self.operationnumber, 999):
                 try:
@@ -217,7 +225,7 @@ class video:
         return(0)
     def crop(self, keeporiginal=False, format='mp4', resize=False, mpegquality=MPEGQUALITY):  
         if self.currentcrop=='':
-            if DEBUG: print 'No crop boundries for this video object, running cropdetect'
+            logging.debug('No crop boundries for this video object, running cropdetect')
             vid.detectcropvalues()
         if self.croptop == 0 and self.cropbottom == 0 and self.cropleft == 0 and self.cropright == 0:
             print 'No crop borders detected'
@@ -225,16 +233,18 @@ class video:
         # I am overriding the framerate here since it doesn't always get the correct framerate??
         vid.framerate=29.97
         # Try it first just cropping, if it doesn't work try specifying the target format
-        if DEBUG: print ('DEBUG: Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))
+        logging.debug(
+            'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))
         rc=os.system('ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (self.logfile, self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))>>8
         if rc == 1:
-            if DEBUG: print ('DEBUG: Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))
+            logging.debug('Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))
             rc=os.system('ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))>>8
             if rc == 1:
-                if DEBUG: print 'DEBUG: Crop failed, returning failure code'
+                logging.debug('Crop failed, returning failure code')
                 return False
         self.swapfiles(keeporiginal)
         return True
+
     def cutcommercials(self, keeporiginal=False):
     # Commercial cutting is experimental and may not work as intended
         rc=os.system('mythcommflag > /dev/null 2>&1 -f %s' % self.filename) >> 8
@@ -252,6 +262,7 @@ class video:
             return(2)
         self.swapfiles(keeporiginal)
         self.clearcutlist()
+
     def transcode(self, keeporiginal=False):
         rc=os.system('mythtranscode -i "%s" -o "%s/new.%s"' % (self.filename, self.workdir,os.path.basename(self.filename))) >> 8
         if rc != 0:
@@ -259,11 +270,13 @@ class video:
             return(2)
         self.swapfiles(keeporiginal)
         self.clearcutlist()
+
     def rebuildseeklist(self):
         rc=os.system('mythcommflag --video %s' % self.filename) >> 8
         if rc != 0:
             print 'Rebuilding seek list failed for %s with error %d' % (self.filename,rc)
             return(1)
+
     def clearcutlist(self):
         rc=os.system('mythcommflag --clearcutlist -f %s' % self.filename) >> 8
         conn = MySQLdb.connect (host = DBHOST, user = DBUSER, passwd = DBPASS, db = "mythconverg")
@@ -274,12 +287,14 @@ class video:
         if rc != 0 :
             print 'Clearing cutlist failed for %s with error %d' % (self.filename,rc)
             return(1)
+
     def marktranscoded(self):
         conn=MySQLdb.connect(host = DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
         cursor=conn.cursor()
         cursor.execute("update recorded set transcoded=1 where basename='%s';" % (os.path.basename(self.filename)))
         cursor.close()
         conn.close()
+
 
 def deleteoldlocks(path=MYTHRECORDINGSPATH):
     if len(path) == 0:
@@ -291,10 +306,11 @@ def deleteoldlocks(path=MYTHRECORDINGSPATH):
                 if re.search('cleanupvideoran$', file) != None:
                     tempfile='.'.join(file.split('.')[:-1])
                     if tempfile not in files:
-                        if DEBUG: print 'DEBUG: Deleting old lock file: %s' % os.path.join(directory, file)
+                        logging.debug('Deleting old lock file: %s' % os.path.join(directory, file))
                         os.remove(os.path.join(directory, file))
         except OSError:
             pass
+
 
 def deleteoldbackups(path=MYTHRECORDINGSPATH):
     if len(path) == 0:
@@ -306,12 +322,13 @@ def deleteoldbackups(path=MYTHRECORDINGSPATH):
                 if re.search('\.old\.*', file) != None:
                     tempfile='.'.join(file.split('.')[:-2])
                     if tempfile not in files:
-                        if DEBUG: print 'DEBUG: Deleting old backup file: %s' % os.path.join(directory, file)
+                        logging.debug('DEBUG: Deleting old backup file: %s' % os.path.join(directory, file))
                         os.remove(os.path.join(directory, file))
         except OSError:
             pass
 
-def df(directory='/',humanreadable=False):
+
+def df(directory='/', humanreadable=False):
     if humanreadable == True:
         options='-khP'
     else:
@@ -334,7 +351,7 @@ for line in open('/etc/mythtv/mysql.txt','r').readlines():
     if splitline[0].lower() == 'dbpassword':
         DBPASS=splitline[1]
 
-if DEBUG: print 'DEBUG: command is: %s' % ' '.join(sys.argv)
+logging.debug('command is: %s' % ' '.join(sys.argv))
 # Parse the command line
 try:
     opts,args = getopt.getopt(sys.argv[1:],"h",["cutcommercials","cropvideo","croptwice","allowrunagain","examineframes=","horizcrop=","horizcroppercent=","keeporiginal","deleteoldlocks","deleteoldbackups","transcode","help"])
@@ -393,8 +410,6 @@ if os.path.exists(FILENAME) == False:
         print 'No such file, %s' % FILENAME
         sys.exit(5)
 FILESIZE=os.path.getsize(FILENAME)/1024
-#if DEBUG: print 'DEBUG: Filename:',FILENAME
-#if DEBUG: print 'DEBUG: Original Filesize:',FILESIZE
 for entry in WORKDIRS:
     used,available=df(entry)
     if used != 'None':
@@ -402,12 +417,12 @@ for entry in WORKDIRS:
             WORKDIR=entry
             break
     
-if DEBUG: print 'DEBUG: Work Directory:',WORKDIR
+logging.debug('Work Directory:',WORKDIR)
 
 # Create a video object
 vid=video(filename=FILENAME,workdir=WORKDIR)
 
-if DEBUG: print 'DEBUG: Checking for lock file'
+logging.debug('DEBUG: Checking for lock file')
 if RUNAGAIN == False:
     if vid.checklockfile() == True:
         print 'cleanupvideo.py has already been run on this file'
@@ -417,35 +432,35 @@ if RUNAGAIN == False:
         print 'check file and rerun with --runagain if the previous run failed'
         sys.exit(1)
         
-if DEBUG: print 'DEBUG: Creating the lock file'
+logging.debug('Creating the lock file')
 vid.createlockfile(completed=False)
 
 if CROPVIDEO:
-    if DEBUG: print 'DEBUG: Detecting Video cropborders with horizcrop=%d, horizcroppercent=%d' % (HORIZCROP, HORIZCROPPERCENT)
+    logging.debug('Detecting Video cropborders with horizcrop=%d, horizcroppercent=%d' % (HORIZCROP, HORIZCROPPERCENT))
     vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=HORIZCROP, horizcroppercent=HORIZCROPPERCENT)
-    if DEBUG: print 'DEBUG: Cropping the video'
+    logging.debug('Cropping the video')
     if vid.crop(keeporiginal=KEEPORIGINAL)==False:
         vid.deletelockfile()
         print 'ERROR: All cropping options failed, exiting without making any changes'
         sys.exit(9)
 
 if CUTCOMMERCIALS:
-    if DEBUG: print 'DEBUG: Removing commercials'
+    logging.info('Removing commercials')
     vid.cutcommercials(keeporiginal=KEEPORIGINAL)
 
 if CROPTWICE:
-    if DEBUG: print 'DEBUG: Detecting crop boundries a second time'
+    logging.debug('Detecting crop boundries a second time')
     vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=0, horizcroppercent=0)
-    if DEBUG: print 'DEBUG: Cropping the video a second time'
+    logging.debug('Cropping the video a second time')
     vid.crop(keeporiginal=KEEPORIGINAL)
 
 # If the video has not been transcoded and the transcode option is enabled, transcode the video
 if CUTCOMMERCIALS == False and TRANSCODE == True:
     vid.transcode(keeporiginal=KEEPORIGINAL)
     
-if DEBUG: print 'DEBUG: Updating the seeklist'
+logging.debug('Updating the seeklist')
 vid.rebuildseeklist()
 
-if DEBUG: print 'DEBUG: Updating the lock file to indicate cleanvideo ran sucessfully'
+logging.debug('Updating the lock file to indicate cleanvideo ran sucessfully')
 vid.marktranscoded()
 vid.createlockfile(completed=True)
