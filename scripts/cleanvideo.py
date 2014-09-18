@@ -389,6 +389,10 @@ if __name__ == "__main__":
         '--keeporiginal', action='store_true',
         help='Keeps the original files with a .old.x extension (can increase space usage significantly)'
     )
+    parser.add_argument(
+        '--transcode', action='store_true',
+        help='Transcode the video'
+    )
     args = parser.parse_args()
     logging.debug('command is: %s' % ' '.join(sys.argv))
     # Parse the command line
@@ -418,8 +422,8 @@ if __name__ == "__main__":
         #    RUNAGAIN=True
         #if o in ("--keeporiginal"):
         #    KEEPORIGINAL=True
-        if o in ("--transcode"):
-            TRANSCODE=True
+        #if o in ("--transcode"):
+        #    TRANSCODE=True
         if o in ("--deleteoldlocks"):
             deleteoldlocks()
         if o in ("--deleteoldbackups"):
