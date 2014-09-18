@@ -6,6 +6,7 @@ import getopt
 import re
 import socket
 import logging
+import argparse
 try:
     import MySQLdb
 except ImportError:
@@ -47,28 +48,6 @@ MYTHRECORDINGSPATH=['/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings'
 WORKDIRS=['/tmp','/work','/var/lib/mythtv/recordings','/usr/local/mythtv/recordings']
 WORKDIR='/var/lib/mythtv/recordings'
 
-def usage():
-    print 'Usage: cleanvideo [--cutcommercials] [--transcode] [--cropvideo] [--croptwice] [--examineframes numframes] [--horizcrop numlines] [--horizcroppercent percent] [--allowrunagain] [--keeporiginal] FILENAME'
-    print '\t--cutcommercials\tCut the commercials out of the video, this automatically enables the transcode option'
-    print '\t--cropvideo     \tCrop the black borders off the sides of the video'
-    print '\t--croptwice     \tCrop a second time after removing the horizcrop/horizcropprecent and cutting out commercials'
-    print '\t--transcode     \tTranscode the video'
-    print '\t--examineframes \tThe number of frames to examine to determine the crop amount, the default is all frames'
-    print '\t--horizcrop     \tAdditional number of horizontal lines to crop from the top and the bottom'
-    print '\t--horizcropprecent\tPercentage of lines to crop from top and bottom, overrides horizcrop'
-    print '\t                \t(useful for removing garbage lines from the top of some recordings)'
-    print '\t--allowrunagain \tRun even if it has been run before'
-    print '\t--keeporiginal  \tKeeps the original files with a .old.x extension (can increase space usage significantly)'
-    print '\t--deleteoldlocks\tDelete old lock files with no associated video file'
-    print '\t--deleteoldbackups\tDelete old backup files'
-    print
-    print 'Notes:'
-    print '\tCutting commercials always uses mythtranscode which also'
-    print '\ttranscodes the video with the settings defined for the'
-    print '\trecording in mythtv.'
-    print '\tCropping always transcodes to MP4 file with the borders'
-    print '\tcropped and other video settings as close to the original'
-    print '\tfile as possible.'
     
 class video:
     def __init__(self,filename='', workdir=WORKDIR, logfile='/tmp/cleanupvideo.out'):
@@ -341,127 +320,186 @@ def df(directory='/', humanreadable=False):
     splitline=dfout.split()
     return splitline[2],splitline[3]
 
-# Start of Script execution
-# Get the database settings
-for line in open('/etc/mythtv/mysql.txt','r').readlines():
-    splitline=line.strip().split('=')
-    if splitline[0].lower() == 'dbhostname':
-        DBHOST=splitline[1]
-    if splitline[0].lower() == 'dbusername':
-        DBUSER=splitline[1]
-    if splitline[0].lower() == 'dbpassword':
-        DBPASS=splitline[1]
+def usage():
+    print 'Usage: cleanvideo [--cutcommercials] [--transcode] [--cropvideo] [--croptwice] [--examineframes numframes] [--horizcrop numlines] [--horizcroppercent percent] [--allowrunagain] [--keeporiginal] FILENAME'
+    print '\t--cutcommercials\tCut the commercials out of the video, this automatically enables the transcode option'
+    print '\t--cropvideo     \tCrop the black borders off the sides of the video'
+    print '\t--croptwice     \tCrop a second time after removing the horizcrop/horizcropprecent and cutting out commercials'
+    print '\t--transcode     \tTranscode the video'
+    print '\t--examineframes \tThe number of frames to examine to determine the crop amount, the default is all frames'
+    print '\t--horizcrop     \tAdditional number of horizontal lines to crop from the top and the bottom'
+    print '\t--horizcropprecent\tPercentage of lines to crop from top and bottom, overrides horizcrop'
+    print '\t                \t(useful for removing garbage lines from the top of some recordings)'
+    print '\t--allowrunagain \tRun even if it has been run before'
+    print '\t--keeporiginal  \tKeeps the original files with a .old.x extension (can increase space usage significantly)'
+    print '\t--deleteoldlocks\tDelete old lock files with no associated video file'
+    print '\t--deleteoldbackups\tDelete old backup files'
+    print
+    print 'Notes:'
+    print '\tCutting commercials always uses mythtranscode which also'
+    print '\ttranscodes the video with the settings defined for the'
+    print '\trecording in mythtv.'
+    print '\tCropping always transcodes to MP4 file with the borders'
+    print '\tcropped and other video settings as close to the original'
+    print '\tfile as possible.'
 
-logging.debug('command is: %s' % ' '.join(sys.argv))
-# Parse the command line
-try:
-    opts,args = getopt.getopt(sys.argv[1:],"h",["cutcommercials","cropvideo","croptwice","allowrunagain","examineframes=","horizcrop=","horizcroppercent=","keeporiginal","deleteoldlocks","deleteoldbackups","transcode","help"])
-except getopt.GetoptError:
-    usage()
-    sys.exit(2)
-for o,a in opts:
-    if o in ("-h","--help"):
+
+if __name__ == "__main__":
+    # Start of Script execution
+    # Get the database settings
+    for line in open('/etc/mythtv/mysql.txt','r').readlines():
+        splitline=line.strip().split('=')
+        if splitline[0].lower() == 'dbhostname':
+            DBHOST=splitline[1]
+        if splitline[0].lower() == 'dbusername':
+            DBUSER=splitline[1]
+        if splitline[0].lower() == 'dbpassword':
+            DBPASS=splitline[1]
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--cutcommercials', action="store_true",
+        help='Cut the commercials out of the video, this automatically enables the transcode option'
+    )
+    parser.add_argument(
+        '--cropvideo', action="store_true", help="Crop the black borders off the sides of the video"
+    )
+    parser.add_argument(
+        '--croptwice', action='store_true',
+        help='Crop a second time after removing the horizcrop/horizcropprecent and cutting out commercials'
+    )
+    parser.add_argument(
+        '--examineframes', type=int, default=0,
+        help='The number of frames to examine to determine the crop amount, the default is all frames'
+    )
+    parser.add_argument(
+        '--horizcrop', type=int, default=1,
+        help='Additional number of horizontal lines to crop from the top and the bottom'
+    )
+    parser.add_argument(
+        '--horizcroppercent', type=int, default=0,
+        help='Percentage of lines to crop from top and bottom, overrides horizcrop (useful for removing garbage lines '
+             'from the top of some recordings'
+    )
+    parser.add_argument(
+        '--allowrunagain', action='store_true',
+        help='Run even if the video has been operated on before'
+    )
+    parser.add_argument(
+        '--keeporiginal', action='store_true',
+        help='Keeps the original files with a .old.x extension (can increase space usage significantly)'
+    )
+    args = parser.parse_args()
+    logging.debug('command is: %s' % ' '.join(sys.argv))
+    # Parse the command line
+    try:
+        opts,args = getopt.getopt(sys.argv[1:],"h",["cutcommercials","cropvideo","croptwice","allowrunagain","examineframes=","horizcrop=","horizcroppercent=","keeporiginal","deleteoldlocks","deleteoldbackups","transcode","help"])
+    except getopt.GetoptError:
+        usage()
+        sys.exit(2)
+    for o,a in opts:
+        #if o in ("-h","--help"):
+        #  usage()
+        #  sys.exit(0)
+        #if o in ("--cutcommercials"):
+        #  CUTCOMMERCIALS=True
+        #if o in ("--cropvideo"):
+        #    CROPVIDEO=True
+        #if o in ("--croptwice"):
+        #    CROPTWICE=True
+        #    CROPVIDEO=True
+        #if o in ("--examineframes"):
+        #    EXAMINEFRAMES=a
+        #if o in ("--horizcrop"):
+        #    HORIZCROP=a
+        #if o in ("--horizcroppercent"):
+        #    HORIZCROPPERCENT=a
+        #if o in ("--allowrunagain"):
+        #    RUNAGAIN=True
+        #if o in ("--keeporiginal"):
+        #    KEEPORIGINAL=True
+        if o in ("--transcode"):
+            TRANSCODE=True
+        if o in ("--deleteoldlocks"):
+            deleteoldlocks()
+        if o in ("--deleteoldbackups"):
+            deleteoldbackups()
+    if len(args) != 1:
+      print 'To many arguments'
       usage()
-      sys.exit(0)
-    if o in ("--cutcommercials"):
-      CUTCOMMERCIALS=True
-    if o in ("--cropvideo"):
-        CROPVIDEO=True
-    if o in ("--croptwice"):
-        CROPTWICE=True
-        CROPVIDEO=True
-    if o in ("--examineframes"):
-        EXAMINEFRAMES=a
-    if o in ("--horizcrop"):
-        HORIZCROP=a
-    if o in ("--horizcroppercent"):
-        HORIZCROPPERCENT=a
-    if o in ("--allowrunagain"):
-        RUNAGAIN=True
-    if o in ("--keeporiginal"):
-        KEEPORIGINAL=True
-    if o in ("--transcode"):
+      sys.exit(1)
+
+    # This is needed because the video output by ffmpeg generates an
+    # unable to initialize video error from the mythtv frontend until
+    # it is ran through mythtranscode.
+    if CUTCOMMERCIALS == False:
         TRANSCODE=True
-    if o in ("--deleteoldlocks"):
-        deleteoldlocks()
-    if o in ("--deleteoldbackups"):
-        deleteoldbackups()
-if len(args) != 1:
-  print 'To many arguments'
-  usage()
-  sys.exit(1)
 
-# This is needed because the video output by ffmpeg generates an
-# unable to initialize video error from the mythtv frontend until
-# it is ran through mythtranscode.
-if CUTCOMMERCIALS == False:
-    TRANSCODE=True
-    
-FILENAME=args[0]
-BASENAME=os.path.basename(FILENAME)
-if os.path.exists(FILENAME) == False:
-    fileexists=False
-    for path in MYTHRECORDINGSPATH:
-        if os.path.exists('%s/%s' % (path,BASENAME)):
-            fileexists=True
-            DIRNAME=path
-            FILENAME='%s/%s' % (path,BASENAME)
-            break
-    if fileexists == False:
-        print 'No such file, %s' % FILENAME
-        sys.exit(5)
-FILESIZE=os.path.getsize(FILENAME)/1024
-for entry in WORKDIRS:
-    used,available=df(entry)
-    if used != 'None':
-        if long(available) > long(FILESIZE):
-            WORKDIR=entry
-            break
-    
-logging.debug('Work Directory:',WORKDIR)
+    FILENAME=args[0]
+    BASENAME=os.path.basename(FILENAME)
+    if os.path.exists(FILENAME) == False:
+        fileexists=False
+        for path in MYTHRECORDINGSPATH:
+            if os.path.exists('%s/%s' % (path,BASENAME)):
+                fileexists=True
+                DIRNAME=path
+                FILENAME='%s/%s' % (path,BASENAME)
+                break
+        if fileexists == False:
+            print 'No such file, %s' % FILENAME
+            sys.exit(5)
+    FILESIZE=os.path.getsize(FILENAME)/1024
+    for entry in WORKDIRS:
+        used,available=df(entry)
+        if used != 'None':
+            if long(available) > long(FILESIZE):
+                WORKDIR=entry
+                break
 
-# Create a video object
-vid=video(filename=FILENAME,workdir=WORKDIR)
+    logging.debug('Work Directory:',WORKDIR)
 
-logging.debug('DEBUG: Checking for lock file')
-if RUNAGAIN == False:
-    if vid.checklockfile() == True:
-        print 'cleanupvideo.py has already been run on this file'
-        sys.exit(1)
-    if vid.checklockfile() == False:
-        print 'cleanvideo.py is currently running on this file or exited abnormally'
-        print 'check file and rerun with --runagain if the previous run failed'
-        sys.exit(1)
-        
-logging.debug('Creating the lock file')
-vid.createlockfile(completed=False)
+    # Create a video object
+    vid=video(filename=FILENAME,workdir=WORKDIR)
 
-if CROPVIDEO:
-    logging.debug('Detecting Video cropborders with horizcrop=%d, horizcroppercent=%d' % (HORIZCROP, HORIZCROPPERCENT))
-    vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=HORIZCROP, horizcroppercent=HORIZCROPPERCENT)
-    logging.debug('Cropping the video')
-    if vid.crop(keeporiginal=KEEPORIGINAL)==False:
-        vid.deletelockfile()
-        print 'ERROR: All cropping options failed, exiting without making any changes'
-        sys.exit(9)
+    logging.debug('DEBUG: Checking for lock file')
+    if RUNAGAIN == False:
+        if vid.checklockfile() == True:
+            print 'cleanupvideo.py has already been run on this file'
+            sys.exit(1)
+        if vid.checklockfile() == False:
+            print 'cleanvideo.py is currently running on this file or exited abnormally'
+            print 'check file and rerun with --runagain if the previous run failed'
+            sys.exit(1)
 
-if CUTCOMMERCIALS:
-    logging.info('Removing commercials')
-    vid.cutcommercials(keeporiginal=KEEPORIGINAL)
+    logging.debug('Creating the lock file')
+    vid.createlockfile(completed=False)
 
-if CROPTWICE:
-    logging.debug('Detecting crop boundries a second time')
-    vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=0, horizcroppercent=0)
-    logging.debug('Cropping the video a second time')
-    vid.crop(keeporiginal=KEEPORIGINAL)
+    if CROPVIDEO:
+        logging.debug('Detecting Video cropborders with horizcrop=%d, horizcroppercent=%d' % (HORIZCROP, HORIZCROPPERCENT))
+        vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=HORIZCROP, horizcroppercent=HORIZCROPPERCENT)
+        logging.debug('Cropping the video')
+        if vid.crop(keeporiginal=KEEPORIGINAL)==False:
+            vid.deletelockfile()
+            print 'ERROR: All cropping options failed, exiting without making any changes'
+            sys.exit(9)
 
-# If the video has not been transcoded and the transcode option is enabled, transcode the video
-if CUTCOMMERCIALS == False and TRANSCODE == True:
-    vid.transcode(keeporiginal=KEEPORIGINAL)
-    
-logging.debug('Updating the seeklist')
-vid.rebuildseeklist()
+    if CUTCOMMERCIALS:
+        logging.info('Removing commercials')
+        vid.cutcommercials(keeporiginal=KEEPORIGINAL)
 
-logging.debug('Updating the lock file to indicate cleanvideo ran sucessfully')
-vid.marktranscoded()
-vid.createlockfile(completed=True)
+    if CROPTWICE:
+        logging.debug('Detecting crop boundries a second time')
+        vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=0, horizcroppercent=0)
+        logging.debug('Cropping the video a second time')
+        vid.crop(keeporiginal=KEEPORIGINAL)
+
+    # If the video has not been transcoded and the transcode option is enabled, transcode the video
+    if CUTCOMMERCIALS == False and TRANSCODE == True:
+        vid.transcode(keeporiginal=KEEPORIGINAL)
+
+    logging.debug('Updating the seeklist')
+    vid.rebuildseeklist()
+
+    logging.debug('Updating the lock file to indicate cleanvideo ran sucessfully')
+    vid.marktranscoded()
+    vid.createlockfile(completed=True)
