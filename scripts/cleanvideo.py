@@ -7,6 +7,7 @@ import re
 import socket
 import logging
 import argparse
+import xml.etree.ElementTree as ET
 
 logging.basicConfig(level=logging.DEBUG)
 try:
@@ -29,13 +30,6 @@ except ImportError:
 # Set some reasonable defaults
 ###########################################################
 # Default number of lines to crop off the top
-CUTCOMMERCIALS = False
-CROPVIDEO = False
-CROPTWICE = False
-TRANSCODE = False
-RUNAGAIN = False
-KEEPORIGINAL = False
-EXAMINEFRAMES = 0
 TURBO = 213
 MPEGQUALITY = 1800
 MYTHRECORDINGSPATH = ['/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings', '.']
@@ -220,12 +214,12 @@ class video(object):
     def crop(self, keeporiginal=False, format='mp4', resize=False, mpegquality=MPEGQUALITY):
         if self.currentcrop == '':
             logging.debug('No crop boundries for this video object, running cropdetect')
-            vid.detectcropvalues()
+            self.detectcropvalues()
         if self.croptop == 0 and self.cropbottom == 0 and self.cropleft == 0 and self.cropright == 0:
             print 'No crop borders detected'
             return (0)
             # I am overriding the framerate here since it doesn't always get the correct framerate??
-        vid.framerate = 29.97
+        self.framerate = 29.97
         # Try it first just cropping, if it doesn't work try specifying the target format
         logging.debug(
             'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d '
@@ -358,6 +352,9 @@ def df(directory='/', humanreadable=False):
 
 
 def find_work_directory(filename):
+    """
+    Search the work directories for one with space to fit the filename
+    """
     global WORKDIRS
 
     workdir = None
@@ -371,28 +368,54 @@ def find_work_directory(filename):
     return workdir
 
 
+def get_mythtv_database_settings():
+    """
+    Get the mythtv database settings
+    """
+
+    # First set reasonable defaults
+    settings = {
+        'host': 'localhost',
+        'username': 'mythtv',
+        'password': 'mythtv',
+        'databasename': 'mythconverg',
+        'port': '3306'
+    }
+
+    # If there's an old style mythtv config file, update the defaults with it's values
+    if os.path.exists('/etc/mythtv/mysql.txt'):
+        for line in open('/etc/mythtv/mysql.txt','r').readlines():
+            splitline=line.strip().split('=')
+            if splitline[0].lower() == 'dbhostname':
+                settings['host'] = splitline[1]
+            if splitline[0].lower() == 'dbusername':
+                settings['username'] = splitline[1]
+            if splitline[0].lower() == 'dbpassword':
+                settings['password'] = splitline[1]
+
+    # If there's a new config.xml file, update the settings from it
+    if os.path.exists('/etc/mythtv/config.xml'):
+        tree = ET.parse('/etc/mythtv/config.xml')
+        root = tree.getroot()
+        for dbset in root.find('Database'):
+            settings[dbset.tag.lower] = dbset.attrib
+
+    return settings
+
+
 if __name__ == "__main__":
-    # Start of Script execution
-    # Get the database settings
-    # for line in open('/etc/mythtv/mysql.txt','r').readlines():
-    #     splitline=line.strip().split('=')
-    #     if splitline[0].lower() == 'dbhostname':
-    #         DBHOST=splitline[1]
-    #     if splitline[0].lower() == 'dbusername':
-    #         DBUSER=splitline[1]
-    #     if splitline[0].lower() == 'dbpassword':
-    #         DBPASS=splitline[1]
+    db_settings = get_mythtv_database_settings()
 
     parser = argparse.ArgumentParser()
     db_group = parser.add_argument_group('Database Settings')
     db_group.add_argument(
-        '--dbhostname', default='localhost', help='The hostname or ip address of the database server (%(default)s)'
+        '--dbhostname', default=db_settings['host'], help='The hostname or ip address of the database server (%(default)s)'
     )
     db_group.add_argument(
-        '--dbusername', default='mythtv', help='The database user to connect with (%(default)s)'
+        '--dbusername', default=db_settings['username'], help='The database user to connect with (%(default)s)'
     )
     db_group.add_argument(
-        '--dbpassword', default='mythtv', help='The database password for the user (%(default)s)'
+        '--dbpassword', default=db_settings['password'], help='The database password for the user (%(default)s)'
     )
     parser.add_argument(
         'filename', help='Name of file to transcode'
@@ -499,7 +522,8 @@ if __name__ == "__main__":
                 args.horizcrop, args.horizcroppercent
             )
         )
-        vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=args.horizcrop, horizcroppercent=args.horizcroppercent)
+        vid.detectcropvalues(
+            frames=args.examineframes, horizcrop=args.horizcrop, horizcroppercent=args.horizcroppercent)
         logging.debug('Cropping the video')
         if not vid.crop(keeporiginal=args.keeporiginal):
             vid.deletelockfile()
