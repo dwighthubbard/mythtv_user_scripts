@@ -28,8 +28,6 @@ except ImportError:
 # Set some reasonable defaults
 ###########################################################
 # Default number of lines to crop off the top
-HORIZCROP=1
-HORIZCROPPERCENT=0
 DBHOST='localhost'
 DBUSER='mythtv'
 DBPASS='mythtv'
@@ -51,15 +49,18 @@ WORKDIRS=['/tmp','/work','/var/lib/mythtv/recordings','/usr/local/mythtv/recordi
 
     
 class video(object):
-    def __init__(self,filename='', workdir='/var/lib/mythtv/recordings', logfile='/tmp/cleanupvideo.out'):
+    def __init__(
+            self, filename='', workdir='/var/lib/mythtv/recordings', logfile='/tmp/cleanupvideo.out',
+            horizcrop=1, horizcroppercent=0
+    ):
         self.filename=filename
         self.width=0
         self.height=0
         self.framerate=0
         self.currentcrop=''
         self.frames=0
-        self.horizcrop=HORIZCROP
-        self.horizcroppercent=HORIZCROPPERCENT
+        self.horizcrop=horizcrop
+        self.horizcroppercent=horizcroppercent
         self.croptop=0
         self.cropleft=0
         self.cropright=0
@@ -260,7 +261,7 @@ class video(object):
 
     def clearcutlist(self):
         rc=os.system('mythcommflag --clearcutlist -f %s' % self.filename) >> 8
-        conn = MySQLdb.connect (host = DBHOST, user = DBUSER, passwd = DBPASS, db = "mythconverg")
+        conn = MySQLdb.connect (host=DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
         cursor = conn.cursor()
         cursor.execute("UPDATE recorded SET cutlist=0,filesize=%ld WHERE basename='%s';" % (os.path.getsize(self.filename),os.path.basename(self.filename)))
         cursor.close()
@@ -457,10 +458,14 @@ if __name__ == "__main__":
     logging.debug('Creating the lock file')
     vid.createlockfile(completed=False)
     if args.cropvideo:
-        logging.debug('Detecting Video cropborders with horizcrop=%d, horizcroppercent=%d' % (HORIZCROP, HORIZCROPPERCENT))
-        vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=HORIZCROP, horizcroppercent=HORIZCROPPERCENT)
+        logging.debug(
+            'Detecting Video cropborders with horizcrop=%d, horizcroppercent=%d' % (
+                args.horizcrop, args.horizcroppercent
+            )
+        )
+        vid.detectcropvalues(frames=EXAMINEFRAMES, horizcrop=args.horizcrop, horizcroppercent=args.horizcroppercent)
         logging.debug('Cropping the video')
-        if vid.crop(keeporiginal=KEEPORIGINAL)==False:
+        if not vid.crop(keeporiginal=args.keeporiginal):
             vid.deletelockfile()
             print 'ERROR: All cropping options failed, exiting without making any changes'
             sys.exit(9)
