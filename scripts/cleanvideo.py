@@ -29,9 +29,6 @@ except ImportError:
 # Set some reasonable defaults
 ###########################################################
 # Default number of lines to crop off the top
-DBHOST = 'localhost'
-DBUSER = 'mythtv'
-DBPASS = 'mythtv'
 CUTCOMMERCIALS = False
 CROPVIDEO = False
 CROPTWICE = False
@@ -52,7 +49,7 @@ WORKDIRS = ['/tmp', '/work', '/var/lib/mythtv/recordings', '/usr/local/mythtv/re
 class video(object):
     def __init__(
             self, filename='', workdir='/var/lib/mythtv/recordings', logfile='/tmp/cleanupvideo.out',
-            horizcrop=1, horizcroppercent=0
+            horizcrop=1, horizcroppercent=0, dbhost='localhost', dbuser='mythtv', dbpass='mythtv'
     ):
         self.filename = filename
         self.width = 0
@@ -69,6 +66,9 @@ class video(object):
         self.operationnumber = 0
         self.logfile = logfile
         self.workdir = workdir
+        self.dbhost = dbhost
+        self.dbuser = dbuser
+        self.dbpass = dbpass
 
     def detectcropvalues(self, frames=0, horizcrop=-1, horizcroppercent=-1, turbo=TURBO):
         segmentsecs = 5
@@ -243,11 +243,13 @@ class video(object):
         ) >> 8
         if rc == 1:
             logging.debug(
-                'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
+                'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d '
+                '-cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename)))
             rc = os.system(
-                'ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
+                'ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target '
+                'ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename))) >> 8
             if rc == 1:
@@ -292,7 +294,7 @@ class video(object):
 
     def clearcutlist(self):
         rc = os.system('mythcommflag --clearcutlist -f %s' % self.filename) >> 8
-        conn = MySQLdb.connect(host=DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
+        conn = MySQLdb.connect(host=self.dbhost, user=self.dbuser, passwd=self.dbpass, db="mythconverg")
         cursor = conn.cursor()
         cursor.execute("UPDATE recorded SET cutlist=0,filesize=%ld WHERE basename='%s';" % (
         os.path.getsize(self.filename), os.path.basename(self.filename)))
@@ -303,7 +305,7 @@ class video(object):
             return (1)
 
     def marktranscoded(self):
-        conn = MySQLdb.connect(host=DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
+        conn = MySQLdb.connect(host=self.dbhost, user=self.dbuser, passwd=self.dbpass, db="mythconverg")
         cursor = conn.cursor()
         cursor.execute("update recorded set transcoded=1 where basename='%s';" % (os.path.basename(self.filename)))
         cursor.close()
@@ -475,7 +477,9 @@ if __name__ == "__main__":
     logging.debug('Work Directory: %s', workdir)
 
     # Create a video object
-    vid = video(filename=args.filename, workdir=workdir)
+    vid = video(
+        filename=args.filename, workdir=workdir, dbhost=args.dbhostname, dbuser=args.dbusername, dbpass=args.dbpassword
+    )
 
     logging.debug('Checking for lock file')
     if not args.runagain:
