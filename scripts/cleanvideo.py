@@ -7,6 +7,7 @@ import re
 import socket
 import logging
 import argparse
+
 logging.basicConfig(level=logging.DEBUG)
 try:
     import MySQLdb
@@ -28,199 +29,227 @@ except ImportError:
 # Set some reasonable defaults
 ###########################################################
 # Default number of lines to crop off the top
-DBHOST='localhost'
-DBUSER='mythtv'
-DBPASS='mythtv'
-CUTCOMMERCIALS=False
-CROPVIDEO=False
-CROPTWICE=False
-TRANSCODE=False
-RUNAGAIN=False
-KEEPORIGINAL=False
-EXAMINEFRAMES=0
-TURBO=213
-MPEGQUALITY=1800
-MYTHRECORDINGSPATH=['/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings', '.']
+DBHOST = 'localhost'
+DBUSER = 'mythtv'
+DBPASS = 'mythtv'
+CUTCOMMERCIALS = False
+CROPVIDEO = False
+CROPTWICE = False
+TRANSCODE = False
+RUNAGAIN = False
+KEEPORIGINAL = False
+EXAMINEFRAMES = 0
+TURBO = 213
+MPEGQUALITY = 1800
+MYTHRECORDINGSPATH = ['/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings', '.']
 
 
 # WORKDIRS is A list of directories we can use for temporary files, we will check if the directory exists and has
 # adequate space and use the first directory from the list with enough room.
-WORKDIRS=['/tmp','/work','/var/lib/mythtv/recordings','/usr/local/mythtv/recordings']
+WORKDIRS = ['/tmp', '/work', '/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings']
 
-    
+
 class video(object):
     def __init__(
             self, filename='', workdir='/var/lib/mythtv/recordings', logfile='/tmp/cleanupvideo.out',
             horizcrop=1, horizcroppercent=0
     ):
-        self.filename=filename
-        self.width=0
-        self.height=0
-        self.framerate=0
-        self.currentcrop=''
-        self.frames=0
-        self.horizcrop=horizcrop
-        self.horizcroppercent=horizcroppercent
-        self.croptop=0
-        self.cropleft=0
-        self.cropright=0
-        self.cropbottom=0
-        self.operationnumber=0
-        self.logfile=logfile
-        self.workdir=workdir
+        self.filename = filename
+        self.width = 0
+        self.height = 0
+        self.framerate = 0
+        self.currentcrop = ''
+        self.frames = 0
+        self.horizcrop = horizcrop
+        self.horizcroppercent = horizcroppercent
+        self.croptop = 0
+        self.cropleft = 0
+        self.cropright = 0
+        self.cropbottom = 0
+        self.operationnumber = 0
+        self.logfile = logfile
+        self.workdir = workdir
 
     def detectcropvalues(self, frames=0, horizcrop=-1, horizcroppercent=-1, turbo=TURBO):
-        segmentsecs=5
+        segmentsecs = 5
         if turbo < segmentsecs:
-            turbo=segmentsecs*2
+            turbo = segmentsecs * 2
         if horizcrop != -1:
             # This value is the number of 16 line blocks to crop from the top/bottom, so we need to multiply by 16
-            self.horizcrop=int(horizcrop)*16
+            self.horizcrop = int(horizcrop) * 16
         if horizcroppercent != -1:
-            self.horizcroppercent=horizcroppercent
+            self.horizcroppercent = horizcroppercent
         if frames != 0:
-            self.frames=frames
-        cropsizes={}
-        crop=''
-        WIDTH=0
-        HEIGHT=0
-        edlfilename='%s/cleanvideo_tmp.edl' % self.workdir
-        edifilename=tempfile.mktemp('.edl','cleanupvideo_',self.workdir)
-        fh=open(edifilename,'w')
-        for sec in range(1,14000,turbo):
-            fh.write('%d %d 0\n' % (sec,sec+(turbo-segmentsecs)))
+            self.frames = frames
+        cropsizes = {}
+        crop = ''
+        WIDTH = 0
+        HEIGHT = 0
+        edlfilename = '%s/cleanvideo_tmp.edl' % self.workdir
+        edifilename = tempfile.mktemp('.edl', 'cleanupvideo_', self.workdir)
+        fh = open(edifilename, 'w')
+        for sec in range(1, 14000, turbo):
+            fh.write('%d %d 0\n' % (sec, sec + (turbo - segmentsecs)))
         fh.close()
         if frames == 0:
-            command='mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -vo null %s 2> /dev/null' % (edifilename,self.filename)
+            command = 'mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -vo null %s 2> /dev/null' % (
+            edifilename, self.filename)
         else:
-            command='mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -frames %d -vo null %s 2>/dev/null' % (edifilename,frames,self.filename)
-        logging.debug('Running command:',command)
+            command = 'mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -frames %d -vo null %s 2>/dev/null' % (
+            edifilename, frames, self.filename)
+        logging.debug('Running command:', command)
         for line in os.popen(command).readlines():
-            splitline=line.strip().split()
+            splitline = line.strip().split()
             if len(splitline) > 3 and splitline[0] == 'VIDEO:':
-                WIDTH=splitline[2].split('x')[0]
-                HEIGHT=splitline[2].split('x')[1]
-                self.framerate=splitline[5]
+                WIDTH = splitline[2].split('x')[0]
+                HEIGHT = splitline[2].split('x')[1]
+                self.framerate = splitline[5]
             if len(splitline) > 7 and splitline[0] == '[CROP]':
-                crop=splitline[8][5:-2]
+                crop = splitline[8][5:-2]
             try:
-                cropsizes[crop]=cropsizes[crop]+1
+                cropsizes[crop] = cropsizes[crop] + 1
             except KeyError:
-                cropsizes[crop]=1
-        currentcropcount=0
-        currentcrop=''
+                cropsizes[crop] = 1
+        currentcropcount = 0
+        currentcrop = ''
         for crop in cropsizes.keys():
             if cropsizes[crop] > currentcropcount:
-                currentcrop=crop
-                currentcropcount=cropsizes[crop]
+                currentcrop = crop
+                currentcropcount = cropsizes[crop]
         if len(currentcrop):
-            splitcrop=currentcrop.split(':')
-            height=int(splitcrop[1])
-            evenheight=(height/16)*16
-            remainder=height-evenheight
+            splitcrop = currentcrop.split(':')
+            height = int(splitcrop[1])
+            evenheight = (height / 16) * 16
+            remainder = height - evenheight
             if horizcroppercent > 0:
-                horizcrop=int(float(height)*(float(horizcroppercent)*.01))
+                horizcrop = int(float(height) * (float(horizcroppercent) * .01))
             if remainder == horizcrop:
-                currentcrop='%d:%d:%d:%d' % (int(splitcrop[0]),int(splitcrop[1])-(horizcrop/2),int(splitcrop[2]),int(splitcrop[3])+(horizcrop/2))
+                currentcrop = '%d:%d:%d:%d' % (
+                int(splitcrop[0]), int(splitcrop[1]) - (horizcrop / 2), int(splitcrop[2]),
+                int(splitcrop[3]) + (horizcrop / 2))
             if remainder > horizcrop:
-                currentcrop='%d:%d:%d:%d' % (int(splitcrop[0]),int(splitcrop[1])-(remainder/2),int(splitcrop[2]),int(splitcrop[3])+(remainder/2))
+                currentcrop = '%d:%d:%d:%d' % (
+                int(splitcrop[0]), int(splitcrop[1]) - (remainder / 2), int(splitcrop[2]),
+                int(splitcrop[3]) + (remainder / 2))
             if remainder < horizcrop:
-                currentcrop='%d:%d:%d:%d' % (int(splitcrop[0]),evenheight-16,int(splitcrop[2]),int(splitcrop[3])+8)
-        self.width=int(WIDTH)
-        self.height=int(HEIGHT)
-        self.currentcrop=currentcrop
+                currentcrop = '%d:%d:%d:%d' % (
+                int(splitcrop[0]), evenheight - 16, int(splitcrop[2]), int(splitcrop[3]) + 8)
+        self.width = int(WIDTH)
+        self.height = int(HEIGHT)
+        self.currentcrop = currentcrop
         if len(currentcrop):
-            cropvalues=currentcrop.split(':')
-            self.croptop=int(cropvalues[3])
-            self.cropleft=int(cropvalues[2])
-            self.cropright=self.width-(self.cropleft+int(cropvalues[0]))
-            self.cropbottom=self.height-(self.croptop+(int(cropvalues[1])))
+            cropvalues = currentcrop.split(':')
+            self.croptop = int(cropvalues[3])
+            self.cropleft = int(cropvalues[2])
+            self.cropright = self.width - (self.cropleft + int(cropvalues[0]))
+            self.cropbottom = self.height - (self.croptop + (int(cropvalues[1])))
             if self.cropbottom < 0:
-                self.cropbottom=0
+                self.cropbottom = 0
         logging.debug(
-            'Crop borders are', self.width,self.height,self.croptop, self.cropleft, self.cropbottom, self.cropright)
+            'Crop borders are', self.width, self.height, self.croptop, self.cropleft, self.cropbottom, self.cropright)
         os.remove(edifilename)
 
     def createlockfile(self, completed=False):
-        fh=open("%s.cleanupvideoran" % self.filename,'w')
+        fh = open("%s.cleanupvideoran" % self.filename, 'w')
         fh.write('filename: %s\n' % self.filename)
         fh.write('hostname: %s\n' % socket.gethostname())
         #fh.write('cutcommercials: %d\n' % self.cutcommercials)
         #fh.write('cropvideo: %d\n' % self.cropvideo)
-        fh.write('frames: %d\n' % self.frames) 
+        fh.write('frames: %d\n' % self.frames)
         fh.write('horizcrop: %d\n' % self.horizcrop)
         fh.write('horizcroppercent: %d\n' % self.horizcroppercent)
         fh.write('completed: %d\n' % completed)
         fh.close()
+
     def deletelockfile(self):
         os.remove('%s.cleanupvideoran' % self.filename)
+
     def checklockfile(self):
-        rc=9
+        rc = 9
         try:
-            fh=open("%s.cleanupvideoran" % self.filename, 'r')
+            fh = open("%s.cleanupvideoran" % self.filename, 'r')
         except IOError:
-            return(2)
+            return (2)
         for line in fh.readlines():
             if len(line):
-                splitline=line.strip().split()
+                splitline = line.strip().split()
                 if splitline[0] == 'completed:':
                     try:
-                        rc=int(splitline[1])
+                        rc = int(splitline[1])
                     except ValueError:
                         if splitline[1] == 'True':
-                            rc=1
+                            rc = 1
                         else:
-                            rc=0
-        return(rc)
+                            rc = 0
+        return (rc)
 
     def swapfiles(self, keeporiginal=False):
-        logging.debug('Swapping files: %s/new.%s <-> %s' % (self.workdir,os.path.basename(self.filename),self.filename))
+        logging.debug(
+            'Swapping files: %s/new.%s <-> %s' % (self.workdir, os.path.basename(self.filename), self.filename))
         if keeporiginal:
             for backupnumber in range(self.operationnumber, 999):
                 try:
-                  fh=open('%s/%s.%d' % (self.workdir,os.path.basename(self.filename), backupnumber))
-                  fh.close()
+                    fh = open('%s/%s.%d' % (self.workdir, os.path.basename(self.filename), backupnumber))
+                    fh.close()
                 except IOError:
-                  break
+                    break
             try:
-                fh=open('%s/new.%s' % (self.workdir,os.path.basename(self.filename)))
+                fh = open('%s/new.%s' % (self.workdir, os.path.basename(self.filename)))
             except IOError:
                 print 'New file did not get created'
-                return(1)
+                return (1)
             fh.close()
-            os.rename(self.filename,'%s.old.%d' % (self.filename, backupnumber))
+            os.rename(self.filename, '%s.old.%d' % (self.filename, backupnumber))
             # This doesn't work if the files aren't on the same device
             #os.rename('%s/new.%s' % (self.workdir,os.path.basename(self.filename),self.filename))
-            os.system('mv %s/new.%s %s' % (self.workdir,os.path.basename(self.filename),self.filename))
+            os.system('mv %s/new.%s %s' % (self.workdir, os.path.basename(self.filename), self.filename))
         else:
             try:
-                fh=open('%s/new.%s' % (self.workdir,os.path.basename(self.filename)))
+                fh = open('%s/new.%s' % (self.workdir, os.path.basename(self.filename)))
             except IOError:
                 print 'New file did not get created'
-                return(1)
+                return (1)
             fh.close()
             os.remove(self.filename)
             # This doesn't work if both files aren't on the same filesystem
             #os.rename('%s/new.%s' % (self.workdir,os.path.basename(self.filename)), self.filename)
-            os.system('mv %s/new.%s %s' % (self.workdir,os.path.basename(self.filename),self.filename))
-        self.operationnumber=self.operationnumber+1
-        return(0)
-    def crop(self, keeporiginal=False, format='mp4', resize=False, mpegquality=MPEGQUALITY):  
-        if self.currentcrop=='':
+            os.system('mv %s/new.%s %s' % (self.workdir, os.path.basename(self.filename), self.filename))
+        self.operationnumber = self.operationnumber + 1
+        return (0)
+
+    def crop(self, keeporiginal=False, format='mp4', resize=False, mpegquality=MPEGQUALITY):
+        if self.currentcrop == '':
             logging.debug('No crop boundries for this video object, running cropdetect')
             vid.detectcropvalues()
         if self.croptop == 0 and self.cropbottom == 0 and self.cropleft == 0 and self.cropright == 0:
             print 'No crop borders detected'
-            return(0)
-        # I am overriding the framerate here since it doesn't always get the correct framerate??
-        vid.framerate=29.97
+            return (0)
+            # I am overriding the framerate here since it doesn't always get the correct framerate??
+        vid.framerate = 29.97
         # Try it first just cropping, if it doesn't work try specifying the target format
         logging.debug(
-            'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))
-        rc=os.system('ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (self.logfile, self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))>>8
+            'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d '
+            '-aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (
+                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
+                self.workdir, os.path.basename(self.filename)
+            )
+        )
+        rc = os.system(
+            'ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 '
+            '-f mp4 -b %dkb "%s/new.%s"' % (
+                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
+                self.workdir, os.path.basename(self.filename)
+            )
+        ) >> 8
         if rc == 1:
-            logging.debug('Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))
-            rc=os.system('ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (self.logfile,self.filename,self.cropleft,self.cropright,self.croptop,self.cropbottom,mpegquality,self.workdir,os.path.basename(self.filename)))>>8
+            logging.debug(
+                'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
+                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
+                self.workdir, os.path.basename(self.filename)))
+            rc = os.system(
+                'ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
+                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
+                self.workdir, os.path.basename(self.filename))) >> 8
             if rc == 1:
                 logging.debug('Crop failed, returning failure code')
                 return False
@@ -229,50 +258,53 @@ class video(object):
 
     def cutcommercials(self, keeporiginal=False):
     # Commercial cutting is experimental and may not work as intended
-        rc=os.system('mythcommflag > /dev/null 2>&1 -f %s' % self.filename) >> 8
+        rc = os.system('mythcommflag > /dev/null 2>&1 -f %s' % self.filename) >> 8
         if rc > 126:
-            print 'Commercial flagging failed for filename %s with error %d' % (self.filename,rc)
-            return(1)
-        rc=os.system('mythcommflag --gencutlist -f %s' % self.filename) >> 8
+            print 'Commercial flagging failed for filename %s with error %d' % (self.filename, rc)
+            return (1)
+        rc = os.system('mythcommflag --gencutlist -f %s' % self.filename) >> 8
         if rc != 0:
-            print 'Copying cutlist failed for %s with error %d' % (self.filename,rc)
-            return(1)
-        temppath=''
-        rc=os.system('mythtranscode --honorcutlist -i "%s" -o "%s/new.%s"' % (self.filename,self.workdir,os.path.basename(self.filename))) >> 8
+            print 'Copying cutlist failed for %s with error %d' % (self.filename, rc)
+            return (1)
+        temppath = ''
+        rc = os.system('mythtranscode --honorcutlist -i "%s" -o "%s/new.%s"' % (
+        self.filename, self.workdir, os.path.basename(self.filename))) >> 8
         if rc != 0:
-            print 'Cut commercials and transcoding failed for %s with error %d' % (self.filename,rc)
-            return(2)
+            print 'Cut commercials and transcoding failed for %s with error %d' % (self.filename, rc)
+            return (2)
         self.swapfiles(keeporiginal)
         self.clearcutlist()
 
     def transcode(self, keeporiginal=False):
-        rc=os.system('mythtranscode -i "%s" -o "%s/new.%s"' % (self.filename, self.workdir,os.path.basename(self.filename))) >> 8
+        rc = os.system('mythtranscode -i "%s" -o "%s/new.%s"' % (
+        self.filename, self.workdir, os.path.basename(self.filename))) >> 8
         if rc != 0:
             print 'Transcoding failed for %s with error %d' % (self.filename, rc)
-            return(2)
+            return (2)
         self.swapfiles(keeporiginal)
         self.clearcutlist()
 
     def rebuildseeklist(self):
-        rc=os.system('mythcommflag --video %s' % self.filename) >> 8
+        rc = os.system('mythcommflag --video %s' % self.filename) >> 8
         if rc != 0:
-            print 'Rebuilding seek list failed for %s with error %d' % (self.filename,rc)
-            return(1)
+            print 'Rebuilding seek list failed for %s with error %d' % (self.filename, rc)
+            return (1)
 
     def clearcutlist(self):
-        rc=os.system('mythcommflag --clearcutlist -f %s' % self.filename) >> 8
-        conn = MySQLdb.connect (host=DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
+        rc = os.system('mythcommflag --clearcutlist -f %s' % self.filename) >> 8
+        conn = MySQLdb.connect(host=DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
         cursor = conn.cursor()
-        cursor.execute("UPDATE recorded SET cutlist=0,filesize=%ld WHERE basename='%s';" % (os.path.getsize(self.filename),os.path.basename(self.filename)))
+        cursor.execute("UPDATE recorded SET cutlist=0,filesize=%ld WHERE basename='%s';" % (
+        os.path.getsize(self.filename), os.path.basename(self.filename)))
         cursor.close()
-        conn.close() 
-        if rc != 0 :
-            print 'Clearing cutlist failed for %s with error %d' % (self.filename,rc)
-            return(1)
+        conn.close()
+        if rc != 0:
+            print 'Clearing cutlist failed for %s with error %d' % (self.filename, rc)
+            return (1)
 
     def marktranscoded(self):
-        conn=MySQLdb.connect(host = DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
-        cursor=conn.cursor()
+        conn = MySQLdb.connect(host=DBHOST, user=DBUSER, passwd=DBPASS, db="mythconverg")
+        cursor = conn.cursor()
         cursor.execute("update recorded set transcoded=1 where basename='%s';" % (os.path.basename(self.filename)))
         cursor.close()
         conn.close()
@@ -283,10 +315,10 @@ def deleteoldlocks(path=MYTHRECORDINGSPATH):
         return
     for directory in path:
         try:
-            files=os.listdir(directory)
+            files = os.listdir(directory)
             for file in files:
                 if re.search('cleanupvideoran$', file) != None:
-                    tempfile='.'.join(file.split('.')[:-1])
+                    tempfile = '.'.join(file.split('.')[:-1])
                     if tempfile not in files:
                         logging.debug('Deleting old lock file: %s' % os.path.join(directory, file))
                         os.remove(os.path.join(directory, file))
@@ -299,10 +331,10 @@ def deleteoldbackups(path=MYTHRECORDINGSPATH):
         return
     for directory in path:
         try:
-            files=os.listdir(directory)
+            files = os.listdir(directory)
             for file in files:
                 if re.search('\.old\.*', file) != None:
-                    tempfile='.'.join(file.split('.')[:-2])
+                    tempfile = '.'.join(file.split('.')[:-2])
                     if tempfile not in files:
                         logging.debug('DEBUG: Deleting old backup file: %s' % os.path.join(directory, file))
                         os.remove(os.path.join(directory, file))
@@ -312,22 +344,22 @@ def deleteoldbackups(path=MYTHRECORDINGSPATH):
 
 def df(directory='/', humanreadable=False):
     if humanreadable == True:
-        options='-khP'
+        options = '-khP'
     else:
-        options='-kP'
+        options = '-kP'
     try:
-        dfout=os.popen('df %s %s 2>/dev/null' % (options,directory)).readlines()[1]
+        dfout = os.popen('df %s %s 2>/dev/null' % (options, directory)).readlines()[1]
     except IndexError:
-        return 'None','None'
-    splitline=dfout.split()
-    return splitline[2],splitline[3]
+        return 'None', 'None'
+    splitline = dfout.split()
+    return splitline[2], splitline[3]
 
 
 def find_work_directory(filename):
     global WORKDIRS
 
     workdir = None
-    FILESIZE = os.path.getsize(filename)/1024
+    FILESIZE = os.path.getsize(filename) / 1024
     for entry in WORKDIRS:
         used, available = df(entry)
         if used != 'None':
@@ -417,7 +449,7 @@ if __name__ == "__main__":
     # unable to initialize video error from the mythtv frontend until
     # it is ran through mythtranscode.
     if not args.cutcommercials:
-        args.transcode=True
+        args.transcode = True
 
     if args.deleteoldlocks:
         deleteoldlocks()
@@ -426,14 +458,14 @@ if __name__ == "__main__":
         deleteoldbackups()
 
     #args.filename=args[0]
-    BASENAME=os.path.basename(args.filename)
+    BASENAME = os.path.basename(args.filename)
     if not os.path.exists(args.filename):
         fileexists = False
         for path in MYTHRECORDINGSPATH:
-            if os.path.exists('%s/%s' % (path,BASENAME)):
+            if os.path.exists('%s/%s' % (path, BASENAME)):
                 fileexists = True
                 DIRNAME = path
-                args.filename = '%s/%s' % (path,BASENAME)
+                args.filename = '%s/%s' % (path, BASENAME)
                 break
         if not fileexists:
             print 'No such file, %s' % args.filename
@@ -443,7 +475,7 @@ if __name__ == "__main__":
     logging.debug('Work Directory: %s', workdir)
 
     # Create a video object
-    vid=video(filename=args.filename, workdir=workdir)
+    vid = video(filename=args.filename, workdir=workdir)
 
     logging.debug('Checking for lock file')
     if not args.runagain:
@@ -473,7 +505,6 @@ if __name__ == "__main__":
     if args.cutcommercials:
         logging.info('Removing commercials')
         vid.cutcommercials(keeporiginal=args.keeporiginal)
-
 
     if args.croptwice:
         logging.debug('Detecting crop boundries a second time')
