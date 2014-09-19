@@ -398,7 +398,7 @@ def get_mythtv_database_settings():
         tree = ET.parse('/etc/mythtv/config.xml')
         root = tree.getroot()
         for dbset in root.find('Database'):
-            settings[dbset.tag.lower()] = dbset.attrib
+            settings[dbset.tag.lower()] = dbset.text
 
     return settings
 
