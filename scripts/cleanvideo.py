@@ -245,7 +245,7 @@ class video(object):
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename)))
             rc = os.system(
-                'avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target '
+                'avconv >> %s 2>>/tmp/log.out -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target '
                 'ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename))) >> 8
