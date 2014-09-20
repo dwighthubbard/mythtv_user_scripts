@@ -224,31 +224,20 @@ class video(object):
             # I am overriding the framerate here since it doesn't always get the correct framerate??
         self.framerate = 29.97
         # Try it first just cropping, if it doesn't work try specifying the target format
-        logging.debug(
-            'Running command: avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d '
-            '-aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (
-                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
-                self.workdir, os.path.basename(self.filename)
-            )
+        command = 'avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 ' \
+                  '-f mp4 -b %dkb "%s/new.%s"' % (
+            self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
+            self.workdir, os.path.basename(self.filename)
         )
-        rc = os.system(
-            'avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 '
-            '-f mp4 -b %dkb "%s/new.%s"' % (
-                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
-                self.workdir, os.path.basename(self.filename)
+        logging.debug('Running command: %s' % command)
+        rc = os.system(command) >> 8
+        if rc:
+            command = 'avconv >>%s 2>>%s -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
+                self.logfile, self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom,
+                mpegquality, self.workdir, os.path.basename(self.filename)
             )
-        ) >> 8
-        if rc == 1:
-            logging.debug(
-                'Running command: avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d '
-                '-cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
-                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
-                self.workdir, os.path.basename(self.filename)))
-            rc = os.system(
-                'avconv >> %s 2>>/tmp/log.out -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target '
-                'ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
-                self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
-                self.workdir, os.path.basename(self.filename))) >> 8
+            logging.debug('Running command: %s' % command)
+            rc = os.system(command) >> 8
             if rc == 1:
                 logging.debug('Crop failed, returning failure code')
                 return False
