@@ -21,7 +21,7 @@ except ImportError:
 # 1. Add code to verify prereqs including:
 #   MySQLdb python module
 #   mplayer
-#   ffmpeg
+#   avconv
 #   mythtranscode
 # 2. Add code to transcode to a second file for example use on ipod/cell-phone/etc
 
@@ -222,14 +222,14 @@ class video(object):
         self.framerate = 29.97
         # Try it first just cropping, if it doesn't work try specifying the target format
         logging.debug(
-            'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d '
+            'Running command: avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d '
             '-aspect 16:9 -f mp4 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename)
             )
         )
         rc = os.system(
-            'ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 '
+            'avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -aspect 16:9 '
             '-f mp4 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename)
@@ -237,12 +237,12 @@ class video(object):
         ) >> 8
         if rc == 1:
             logging.debug(
-                'Running command: ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d '
+                'Running command: avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d '
                 '-cropbottom %d -target ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename)))
             rc = os.system(
-                'ffmpeg >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target '
+                'avconv >> %s 2>&1 -y -i "%s" -cropleft %d -cropright %d -croptop %d -cropbottom %d -target '
                 'ntsc-dvd -aspect 16:9 -b %dkb "%s/new.%s"' % (
                 self.logfile, self.filename, self.cropleft, self.cropright, self.croptop, self.cropbottom, mpegquality,
                 self.workdir, os.path.basename(self.filename))) >> 8
@@ -470,7 +470,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     logging.debug('command is: %s' % ' '.join(sys.argv))
 
-    # This is needed because the video output by ffmpeg generates an
+    # This is needed because the video output by avconv generates an
     # unable to initialize video error from the mythtv frontend until
     # it is ran through mythtranscode.
     if not args.cutcommercials:
