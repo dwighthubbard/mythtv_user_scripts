@@ -140,7 +140,10 @@ class video(object):
             if self.cropbottom < 0:
                 self.cropbottom = 0
         logging.debug(
-            'Crop borders are', self.width, self.height, self.croptop, self.cropleft, self.cropbottom, self.cropright)
+            'Crop borders are: %s %s %s %s %s %s' % (
+                self.width, self.height, self.croptop, self.cropleft, self.cropbottom, self.cropright
+            )
+        )
         os.remove(edifilename)
 
     def createlockfile(self, completed=False):
