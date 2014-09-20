@@ -91,7 +91,7 @@ class video(object):
         else:
             command = 'mplayer -quiet -edl %s -benchmark -nosound -vf cropdetect=24:16 -frames %d -vo null %s 2>/dev/null' % (
             edifilename, frames, self.filename)
-        logging.debug('Running command:', command)
+        logging.debug('Running command: %s' % command)
         for line in os.popen(command).readlines():
             splitline = line.strip().split()
             if len(splitline) > 3 and splitline[0] == 'VIDEO:':
