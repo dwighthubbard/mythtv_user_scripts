@@ -427,7 +427,7 @@ if __name__ == "__main__":
         'filename', help='Name of file to transcode'
     )
     parser.add_argument(
-        '--cutcommercials', action="store_true",
+        '--cut_commercials', action="store_true",
         help='Cut the commercials out of the video, this automatically enables the transcode option'
     )
     parser.add_argument(
