@@ -40,6 +40,17 @@ MYTHRECORDINGSPATH = ['/var/lib/mythtv/recordings', '/usr/local/mythtv/recording
 WORKDIRS = ['/tmp', '/work', '/var/lib/mythtv/recordings', '/usr/local/mythtv/recordings']
 
 
+class ExecutionError(Exception):
+    pass
+
+
+def system_with_exception(command):
+    logging.info('Running command: %s' % command)
+    rc = os.system(command) >> 8
+    if rc:
+        raise ExecutionError("Command '%s' exited with return code of %d" % (command, rc))
+
+
 class video(object):
     def __init__(
             self, filename='', workdir='/var/lib/mythtv/recordings', logfile='/tmp/cleanupvideo.out',
@@ -244,23 +255,26 @@ class video(object):
         self.swapfiles(keeporiginal)
         return True
 
-    def cutcommercials(self, keeporiginal=False):
-    # Commercial cutting is experimental and may not work as intended
-        rc = os.system('mythcommflag > /dev/null 2>&1 -f %s' % self.filename) >> 8
-        if rc > 126:
-            print 'Commercial flagging failed for filename %s with error %d' % (self.filename, rc)
-            return (1)
-        rc = os.system('mythcommflag --gencutlist -f %s' % self.filename) >> 8
-        if rc != 0:
-            print 'Copying cutlist failed for %s with error %d' % (self.filename, rc)
-            return (1)
+    def cut_commercials(self, keep_original=False):
+        # Commercial cutting is experimental and may not work as intended
+        logging.info('cutcommercials: Flagging commercials')
+        system_with_exception('mythcommflag -f %s' % self.filename)
+
+        logging.info('cutcommercials: Copying commercials to cutlist')
+        system_with_exception('mythcommflag --gencutlist -f %s' % self.filename)
+
+        logging.info('cutcommercials: transcoding and removing the commercial segments')
         temppath = ''
-        rc = os.system('mythtranscode --honorcutlist -i "%s" -o "%s/new.%s"' % (
-        self.filename, self.workdir, os.path.basename(self.filename))) >> 8
-        if rc != 0:
-            print 'Cut commercials and transcoding failed for %s with error %d' % (self.filename, rc)
-            return (2)
-        self.swapfiles(keeporiginal)
+        system_with_exception(
+            'mythtranscode --honorcutlist -i "%s" -o "%s/new.%s"' % (
+                self.filename, self.workdir, os.path.basename(self.filename)
+            )
+        )
+
+        logging.info('cutcommercials: Replacing the original file')
+        self.swapfiles(keep_original)
+
+        # Remove the old cutlist since it's no longer valid
         self.clearcutlist()
 
     def transcode(self, keeporiginal=False):
@@ -441,7 +455,7 @@ if __name__ == "__main__":
         help='Run even if the video has been operated on before'
     )
     parser.add_argument(
-        '--keeporiginal', action='store_true',
+        '--keep_original', action='store_true',
         help='Keeps the original files with a .old.x extension (can increase space usage significantly)'
     )
     parser.add_argument(
@@ -465,7 +479,7 @@ if __name__ == "__main__":
     # This is needed because the video output by avconv generates an
     # unable to initialize video error from the mythtv frontend until
     # it is ran through mythtranscode.
-    if not args.cutcommercials:
+    if not args.cut_commercials:
         args.transcode = True
 
     if args.deleteoldlocks:
@@ -517,25 +531,24 @@ if __name__ == "__main__":
         vid.detectcropvalues(
             frames=args.examineframes, horizcrop=args.horizcrop, horizcroppercent=args.horizcroppercent)
         logging.debug('Cropping the video')
-        if not vid.crop(keeporiginal=args.keeporiginal):
+        if not vid.crop(keeporiginal=args.keep_original):
             vid.deletelockfile()
             print 'ERROR: All cropping options failed, exiting without making any changes'
             sys.exit(9)
 
-    if args.cutcommercials:
-        logging.info('Removing commercials')
-        vid.cutcommercials(keeporiginal=args.keeporiginal)
+    if args.cut_commercials:
+        vid.cut_commercials(keep_original=args.keep_original)
 
     if args.croptwice:
         logging.debug('Detecting crop boundries a second time')
         vid.detectcropvalues(frames=args.examineframes, horizcrop=0, horizcroppercent=0)
         logging.debug('Cropping the video a second time')
-        vid.crop(keeporiginal=args.keeporiginal)
+        vid.crop(keeporiginal=args.keep_original)
 
 
     # If the video has not been transcoded and the transcode option is enabled, transcode the video
-    if not args.cutcommercials and args.transcode:
-        vid.transcode(keeporiginal=args.keeporiginal)
+    if not args.cut_commercials and args.transcode:
+        vid.transcode(keeporiginal=args.keep_original)
 
     logging.debug('Updating the seeklist')
     vid.rebuildseeklist()
